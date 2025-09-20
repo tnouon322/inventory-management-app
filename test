@@ -1,0 +1,770 @@
+<!DOCTYPE html>
+
+<html lang="th">
+
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ระบบจัดการคลังสินค้า 2 คลัง</title>
+<script src="https://www.google.com/search?q=https://cdn.tailwindcss.com"></script>
+<style>
+body {
+font-family: 'Inter', sans-serif;
+background-color: #f3f4f6;
+color: #333;
+}
+
+    .container {
+        max-width: 1200px;
+        margin: auto;
+        padding: 1rem;
+    }
+
+    .tab-content {
+        display: none;
+    }
+
+    .tab-content.active {
+        display: block;
+    }
+
+    .loading-overlay {
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0, 0, 0, 0.5);
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        z-index: 1000;
+    }
+</style>
+
+</head>
+
+<body>
+<!-- Overlay for loading state -->
+<div id="loading-overlay" class="loading-overlay hidden">
+<div class="bg-white p-6 rounded-lg shadow-xl flex items-center">
+<svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-gray-800" xmlns="http://www.w3.org/2000/svg" fill="none"
+viewBox="0 0 24 24">
+<circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+<path class="opacity-75" fill="currentColor"
+d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+</path>
+</svg>
+<span class="text-gray-800">กำลังประมวลผล...</span>
+</div>
+</div>
+
+<div class="container bg-white rounded-lg shadow-xl p-6 my-8">
+    <h1 class="text-3xl font-bold text-center text-gray-800 mb-6">ระบบจัดการคลังสินค้า 2 คลัง</h1>
+    <div class="border-b border-gray-200">
+        <nav class="-mb-px flex space-x-8" role="tablist">
+            <button
+                class="tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition duration-300"
+                id="dashboard-tab" role="tab" aria-controls="dashboard-content" aria-selected="true">
+                แดชบอร์ด
+            </button>
+            <button
+                class="tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition duration-300"
+                id="stock-tab" role="tab" aria-controls="stock-content" aria-selected="false">
+                สินค้าคงเหลือ
+            </button>
+            <button
+                class="tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition duration-300"
+                id="transactions-tab" role="tab" aria-controls="transactions-content" aria-selected="false">
+                บันทึกธุรกรรม
+            </button>
+            <button
+                class="tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition duration-300"
+                id="requests-tab" role="tab" aria-controls="requests-content" aria-selected="false">
+                คำขอเบิก
+            </button>
+            <button
+                class="tab-button whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm transition duration-300"
+                id="reports-tab" role="tab" aria-controls="reports-content" aria-selected="false">
+                รายงาน
+            </button>
+        </nav>
+    </div>
+
+    <div id="dashboard-content" class="tab-content active p-4">
+        <h2 class="text-xl font-semibold text-gray-700 mb-4">ภาพรวม</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div class="bg-gray-100 p-4 rounded-lg shadow-md">
+                <h3 class="font-bold text-gray-600">สินค้าคงเหลือรวม</h3>
+                <p id="total-stock-main" class="text-2xl font-bold mt-2 text-gray-800">กำลังโหลด...</p>
+                <p class="text-gray-500">คลังกลาง</p>
+            </div>
+            <div class="bg-gray-100 p-4 rounded-lg shadow-md">
+                <h3 class="font-bold text-gray-600">สินค้าคงเหลือรวม</h3>
+                <p id="total-stock-dept" class="text-2xl font-bold mt-2 text-gray-800">กำลังโหลด...</p>
+                <p class="text-gray-500">คลังหน่วยงาน</p>
+            </div>
+            <div class="bg-red-100 p-4 rounded-lg shadow-md">
+                <h3 class="font-bold text-red-600">สินค้าต่ำกว่าจุดสั่งซื้อ</h3>
+                <p id="reorder-point-items" class="text-2xl font-bold mt-2 text-red-800">กำลังโหลด...</p>
+                <p class="text-red-500">รายการ</p>
+            </div>
+            <div class="bg-yellow-100 p-4 rounded-lg shadow-md">
+                <h3 class="font-bold text-yellow-600">สินค้าใกล้หมดอายุ</h3>
+                <p id="expiry-items" class="text-2xl font-bold mt-2 text-yellow-800">กำลังโหลด...</p>
+                <p class="text-yellow-500">รายการ</p>
+            </div>
+        </div>
+        <div class="mt-8">
+            <button id="export-summary-btn"
+                class="bg-blue-600 text-white font-bold py-3 px-6 rounded-lg hover:bg-blue-700 transition duration-300 shadow-lg">
+                สร้างไฟล์สรุป (Daily Update Pack)
+            </button>
+        </div>
+    </div>
+
+    <div id="stock-content" class="tab-content p-4">
+        <h2 class="text-xl font-semibold text-gray-700 mb-4">สินค้าคงเหลือ</h2>
+        <input type="text" id="stock-search-input" placeholder="ค้นหาตามชื่อสินค้า, SKU..."
+            class="w-full p-2 border border-gray-300 rounded-lg mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <div class="overflow-x-auto rounded-lg shadow-md">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            SKU / ชื่อสินค้า</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            คลัง</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            ตำแหน่ง</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            Lot No</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            วันหมดอายุ</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            คงเหลือ</th>
+                    </tr>
+                </thead>
+                <tbody id="onhand-table-body" class="bg-white divide-y divide-gray-200">
+                    <!-- OnHand data will be rendered here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="transactions-content" class="tab-content p-4">
+        <h2 class="text-xl font-semibold text-gray-700 mb-4">บันทึกธุรกรรม</h2>
+        <div class="mb-4">
+            <button class="transaction-type-tab-btn py-2 px-4 rounded-t-lg font-bold"
+                data-type="RECEIPT">รับเข้า</button>
+            <button class="transaction-type-tab-btn py-2 px-4 rounded-t-lg font-bold"
+                data-type="ISSUE">จ่ายออก</button>
+            <button class="transaction-type-tab-btn py-2 px-4 rounded-t-lg font-bold"
+                data-type="TRANSFER">โอนคลัง</button>
+            <button class="transaction-type-tab-btn py-2 px-4 rounded-t-lg font-bold"
+                data-type="ADJUST">ปรับยอด</button>
+        </div>
+
+        <div id="receipt-form-container" class="transaction-form-container">
+            <h3 class="font-bold text-lg mb-4">ฟอร์มรับเข้า</h3>
+            <form id="receipt-form" class="space-y-4">
+                <input type="text" placeholder="รหัสใบรับเข้า" class="p-2 border rounded-lg w-full"
+                    name="ReceiptID" value="RC-001" readonly>
+                <select name="WarehouseID" class="p-2 border rounded-lg w-full">
+                    <option value="">เลือกคลัง</option>
+                    <option value="MAIN">คลังกลาง</option>
+                    <option value="DEPT">คลังหน่วยงาน</option>
+                </select>
+                <input type="text" placeholder="รหัสสินค้า" class="p-2 border rounded-lg w-full" name="ProductID">
+                <input type="number" placeholder="จำนวน" class="p-2 border rounded-lg w-full" name="Qty">
+                <input type="text" placeholder="LotNo (ถ้ามี)" class="p-2 border rounded-lg w-full" name="LotNo">
+                <input type="date" placeholder="วันหมดอายุ (ถ้ามี)" class="p-2 border rounded-lg w-full"
+                    name="ExpiryDate">
+                <button type="submit"
+                    class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition duration-300">โพสต์
+                    (Post)</button>
+            </form>
+        </div>
+        <div id="issue-form-container" class="transaction-form-container hidden">
+            <h3 class="font-bold text-lg mb-4">ฟอร์มจ่ายออก</h3>
+            <form id="issue-form" class="space-y-4">
+                <input type="text" placeholder="รหัสใบจ่ายออก" class="p-2 border rounded-lg w-full" name="IssueID"
+                    value="IS-001" readonly>
+                <select name="WarehouseID" class="p-2 border rounded-lg w-full">
+                    <option value="">เลือกคลังต้นทาง</option>
+                    <option value="MAIN">คลังกลาง</option>
+                    <option value="DEPT">คลังหน่วยงาน</option>
+                </select>
+                <input type="text" placeholder="รหัสสินค้า" class="p-2 border rounded-lg w-full" name="ProductID">
+                <input type="number" placeholder="จำนวน" class="p-2 border rounded-lg w-full" name="Qty">
+                <button type="submit"
+                    class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition duration-300">โพสต์
+                    (Post)</button>
+            </form>
+        </div>
+        <div id="transfer-form-container" class="transaction-form-container hidden">
+            <h3 class="font-bold text-lg mb-4">ฟอร์มโอนย้าย</h3>
+            <form id="transfer-form" class="space-y-4">
+                <input type="text" placeholder="รหัสใบโอนย้าย" class="p-2 border rounded-lg w-full"
+                    name="TransferID" value="TR-001" readonly>
+                <div class="flex space-x-2">
+                    <select name="FromWarehouseID" class="p-2 border rounded-lg w-1/2">
+                        <option value="">คลังต้นทาง</option>
+                        <option value="MAIN">คลังกลาง</option>
+                        <option value="DEPT">คลังหน่วยงาน</option>
+                    </select>
+                    <select name="ToWarehouseID" class="p-2 border rounded-lg w-1/2">
+                        <option value="">คลังปลายทาง</option>
+                        <option value="MAIN">คลังกลาง</option>
+                        <option value="DEPT">คลังหน่วยงาน</option>
+                    </select>
+                </div>
+                <input type="text" placeholder="รหัสสินค้า" class="p-2 border rounded-lg w-full" name="ProductID">
+                <input type="number" placeholder="จำนวน" class="p-2 border rounded-lg w-full" name="Qty">
+                <button type="submit"
+                    class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition duration-300">โพสต์
+                    (Post)</button>
+            </form>
+        </div>
+        <div id="adjust-form-container" class="transaction-form-container hidden">
+            <h3 class="font-bold text-lg mb-4">ฟอร์มปรับยอด</h3>
+            <form id="adjust-form" class="space-y-4">
+                <input type="text" placeholder="รหัสใบปรับยอด" class="p-2 border rounded-lg w-full"
+                    name="AdjustID" value="AD-001" readonly>
+                <select name="WarehouseID" class="p-2 border rounded-lg w-full">
+                    <option value="">เลือกคลัง</option>
+                    <option value="MAIN">คลังกลาง</option>
+                    <option value="DEPT">คลังหน่วยงาน</option>
+                </select>
+                <input type="text" placeholder="รหัสสินค้า" class="p-2 border rounded-lg w-full" name="ProductID">
+                <input type="number" placeholder="จำนวน (+ หรือ -)" class="p-2 border rounded-lg w-full"
+                    name="Qty">
+                <select name="Reason" class="p-2 border rounded-lg w-full">
+                    <option value="ขาด">นับขาด</option>
+                    <option value="เกิน">นับเกิน</option>
+                    <option value="เสียหาย">ชำรุด</option>
+                </select>
+                <button type="submit"
+                    class="bg-green-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-green-700 transition duration-300">โพสต์
+                    (Post)</button>
+            </form>
+        </div>
+    </div>
+
+    <div id="requests-content" class="tab-content p-4">
+        <h2 class="text-xl font-semibold text-gray-700 mb-4">จัดการคำขอเบิก</h2>
+        <div class="mb-4">
+            <h3 class="font-bold text-lg mb-2">จำลองการสร้างคำขอจาก Google Form</h3>
+            <textarea id="google-form-data" rows="4"
+                class="w-full p-2 border border-gray-300 rounded-lg mb-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="วางข้อมูลจาก Google Form Responses ที่นี่ (JSON format)"></textarea>
+            <button id="process-form-btn"
+                class="bg-purple-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-purple-700 transition duration-300">
+                ประมวลผลคำขอใหม่
+            </button>
+        </div>
+        <div class="overflow-x-auto rounded-lg shadow-md mt-4">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            รหัสคำขอ</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            วันที่ขอ</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            ผู้ขอ</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            สถานะ</th>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                            การดำเนินการ</th>
+                    </tr>
+                </thead>
+                <tbody id="requests-table-body" class="bg-white divide-y divide-gray-200">
+                    <!-- Requests data will be rendered here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <div id="reports-content" class="tab-content p-4">
+        <h2 class="text-xl font-semibold text-gray-700 mb-4">รายงานและไฟล์สรุป</h2>
+        <div id="daily-update-pack" class="bg-gray-100 p-4 rounded-lg shadow-md mb-4">
+            <h3 class="font-bold text-lg text-gray-700 mb-2">Daily Update Pack</h3>
+            <p>ธุรกรรมที่โพสต์แล้วของวันนี้ (คลิกปุ่มเพื่อสร้างไฟล์):</p>
+            <ul id="daily-transactions-list" class="list-disc pl-5 mt-2 text-gray-600">
+                <!-- List of posted transactions will be rendered here -->
+            </ul>
+            <button id="export-zip-btn"
+                class="bg-blue-600 text-white font-bold py-2 px-4 rounded-lg hover:bg-blue-700 transition duration-300 mt-4">
+                สร้างและดาวน์โหลด Daily Update Pack (.zip)
+            </button>
+        </div>
+        <div class="overflow-x-auto rounded-lg shadow-md">
+            <table class="min-w-full divide-y divide-gray-200">
+                <thead class="bg-gray-50">
+                    <tr>
+                        <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                            colspan="2">ทะเบียนควบคุมการเคลื่อนไหว (Stock Ledger)</th>
+                    </tr>
+                </thead>
+                <tbody id="ledger-table-body" class="bg-white divide-y divide-gray-200">
+                    <!-- Ledger data will be rendered here -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Mocking global variables for the Canvas environment
+    const __app_id = 'your-app-id';
+    const __firebase_config = '{}';
+    const __initial_auth_token = 'your-auth-token';
+
+    // Helper function to show and hide the loading overlay
+    function showLoading() {
+        document.getElementById('loading-overlay').classList.remove('hidden');
+    }
+
+    function hideLoading() {
+        document.getElementById('loading-overlay').classList.add('hidden');
+    }
+
+    // Simulating the Google Sheets data model with a local storage-based database
+    const db = {
+        Products: [{ ProductID: 'P001', SKU: 'SKU001', ชื่อสินค้า: 'เครื่องมือช่าง', หมวด: 'อุปกรณ์', หน่วยนับหลัก: 'ชิ้น', มีเลขล็อต: 'Y', มีวันหมดอายุ: 'N', ReorderPoint: 10, SupplierID: 'S001', Active: 'Y' }],
+        Warehouses: [{ WarehouseID: 'MAIN', ชื่อคลัง: 'คลังกลาง' }, { WarehouseID: 'DEPT', ชื่อคลัง: 'คลังหน่วยงาน' }],
+        Locations: [{ LocationID: 'L001', WarehouseID: 'MAIN', ชื่อชั้น: 'ชั้น 1' }, { LocationID: 'L002', WarehouseID: 'DEPT', ชื่อชั้น: 'ตู้ A' }],
+        StockLedger: [],
+        OnHand: [],
+        Receipts: [],
+        ReceiptLines: [],
+        Issues: [],
+        IssueLines: [],
+        Transfers: [],
+        TransferLines: [],
+        Adjustments: [],
+        AdjustmentLines: [],
+        Stocktakes: [],
+        StocktakeLines: [],
+        Requests: [],
+        RequestLines: [],
+        DailyUpdatePack: []
+    };
+
+    // Initialize state and load data from local storage
+    let state = {
+        currentPage: 'dashboard',
+        activeTransactionType: 'RECEIPT'
+    };
+
+    function loadData() {
+        try {
+            const storedData = localStorage.getItem('inventoryAppDb');
+            if (storedData) {
+                Object.assign(db, JSON.parse(storedData));
+            }
+        } catch (e) {
+            console.error("Failed to load data from local storage", e);
+        }
+    }
+
+    function saveData() {
+        try {
+            localStorage.setItem('inventoryAppDb', JSON.stringify(db));
+        } catch (e) {
+            console.error("Failed to save data to local storage", e);
+        }
+    }
+
+    // Data processing and logic
+    function calculateOnHand() {
+        const onHandMap = {};
+        db.StockLedger.forEach(item => {
+            const key = `${item.WarehouseID}|${item.ProductID}|${item.LotNo || ''}|${item.ExpiryDate || ''}`;
+            if (!onHandMap[key]) {
+                onHandMap[key] = {
+                    WarehouseID: item.WarehouseID,
+                    ProductID: item.ProductID,
+                    LotNo: item.LotNo,
+                    ExpiryDate: item.ExpiryDate,
+                    QtyOnHand: 0,
+                };
+            }
+            onHandMap[key].QtyOnHand += item.QtyIn - item.QtyOut;
+        });
+        db.OnHand = Object.values(onHandMap);
+        saveData();
+    }
+
+    function updateDashboard() {
+        const mainStock = db.OnHand.filter(item => item.WarehouseID === 'MAIN').reduce((acc, item) => acc + item.QtyOnHand, 0);
+        const deptStock = db.OnHand.filter(item => item.WarehouseID === 'DEPT').reduce((acc, item) => acc + item.QtyOnHand, 0);
+        document.getElementById('total-stock-main').innerText = mainStock;
+        document.getElementById('total-stock-dept').innerText = deptStock;
+
+        const reorderItems = db.OnHand.filter(item => {
+            const product = db.Products.find(p => p.ProductID === item.ProductID);
+            return product && item.QtyOnHand <= product.ReorderPoint;
+        });
+        document.getElementById('reorder-point-items').innerText = reorderItems.length;
+
+        const expiryItems = db.OnHand.filter(item => {
+            if (!item.ExpiryDate) return false;
+            const expiryDate = new Date(item.ExpiryDate);
+            const today = new Date();
+            const diffTime = expiryDate - today;
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            return diffDays > 0 && diffDays <= 60;
+        });
+        document.getElementById('expiry-items').innerText = expiryItems.length;
+    }
+
+    function renderStockTable(filteredData = db.OnHand) {
+        const tableBody = document.getElementById('onhand-table-body');
+        tableBody.innerHTML = '';
+        if (filteredData.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="6" class="text-center py-4 text-gray-500">ไม่พบข้อมูลสินค้าคงเหลือ</td></tr>';
+            return;
+        }
+        filteredData.forEach(item => {
+            const product = db.Products.find(p => p.ProductID === item.ProductID);
+            const warehouse = db.Warehouses.find(w => w.WarehouseID === item.WarehouseID);
+            const row = document.createElement('tr');
+            row.className = 'hover:bg-gray-50 transition duration-150';
+            row.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${product ? product.SKU : ''} / ${product ? product.ชื่อสินค้า : 'N/A'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${warehouse ? warehouse.ชื่อคลัง : 'N/A'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">N/A</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.LotNo || '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.ExpiryDate || '-'}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${item.QtyOnHand}</td>
+        `;
+            tableBody.appendChild(row);
+        });
+    }
+
+    function renderRequestsTable() {
+        const tableBody = document.getElementById('requests-table-body');
+        tableBody.innerHTML = '';
+        if (db.Requests.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="5" class="text-center py-4 text-gray-500">ไม่มีคำขอเบิกที่ค้างอยู่</td></tr>';
+            return;
+        }
+        db.Requests.forEach(req => {
+            const row = document.createElement('tr');
+            row.className = 'hover:bg-gray-50 transition duration-150';
+            const statusColor = { 'Submitted': 'bg-yellow-100 text-yellow-800', 'Issued': 'bg-green-100 text-green-800' };
+            row.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${req.RequestID}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${req.วันที่ขอ}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">${req.Requester}</td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm"><span class="px-2 inline-flex text-xs leading-5 font-semibold rounded-full ${statusColor[req.Status] || 'bg-gray-100 text-gray-800'}">${req.Status}</span></td>
+            <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
+                <button class="bg-blue-500 text-white text-xs px-2 py-1 rounded-full hover:bg-blue-600 transition duration-300" onclick="processRequest('${req.RequestID}')">
+                    จัดจ่าย
+                </button>
+            </td>
+        `;
+            tableBody.appendChild(row);
+        });
+    }
+
+    function renderLedgerTable() {
+        const tableBody = document.getElementById('ledger-table-body');
+        tableBody.innerHTML = '';
+        if (db.StockLedger.length === 0) {
+            tableBody.innerHTML = '<tr><td colspan="2" class="text-center py-4 text-gray-500">ยังไม่มีการเคลื่อนไหวของสินค้า</td></tr>';
+            return;
+        }
+        db.StockLedger.slice().reverse().forEach(entry => {
+            const row = document.createElement('tr');
+            row.className = 'hover:bg-gray-50 transition duration-150';
+            const quantity = entry.QtyIn - entry.QtyOut;
+            const quantityColor = quantity > 0 ? 'text-green-600' : 'text-red-600';
+            row.innerHTML = `
+            <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">${entry['วันที่-เวลา']}</td>
+            <td class="px-6 py-4 text-sm text-gray-500">
+                <p>รหัสสินค้า: ${entry.ProductID}</p>
+                <p>คลัง: ${entry.WarehouseID}</p>
+                <p>ประเภท: ${entry.RefType}</p>
+                <p class="font-bold ${quantityColor}">จำนวน: ${quantity}</p>
+                <p>อ้างอิง: ${entry.RefID}</p>
+            </td>
+        `;
+            tableBody.appendChild(row);
+        });
+    }
+
+    function renderDailyUpdatePackList() {
+        const list = document.getElementById('daily-transactions-list');
+        list.innerHTML = '';
+        db.DailyUpdatePack.forEach(txn => {
+            const li = document.createElement('li');
+            li.className = 'text-sm text-gray-600';
+            li.innerText = `[${txn.RefType}] ${txn.ProductID} จำนวน ${txn.QtyIn - txn.QtyOut} ชิ้น อ้างอิง: ${txn.RefID}`;
+            list.appendChild(li);
+        });
+        if (db.DailyUpdatePack.length === 0) {
+            list.innerHTML = '<li>ไม่มีธุรกรรมที่โพสต์วันนี้</li>';
+        }
+    }
+
+    // Core business logic
+    async function postTransaction(type, data) {
+        showLoading();
+        const now = new Date().toISOString();
+        const operator = 'พัสดุ';
+        const transactionID = data.TransferID || data.ReceiptID || data.IssueID || data.AdjustID;
+
+        if (type === 'RECEIPT') {
+            const receiptLine = { ReceiptID: transactionID, LineNo: 1, ProductID: data.ProductID, LotNo: data.LotNo, ExpiryDate: data.ExpiryDate, Qty: Number(data.Qty), LocationID: 'L001' };
+            db.Receipts.push({ ReceiptID: transactionID, วันที่: now, WarehouseID: data.WarehouseID, สถานะ: 'Posted', ผู้รับ: operator });
+            db.ReceiptLines.push(receiptLine);
+            db.StockLedger.push({
+                LedgerID: `L${db.StockLedger.length + 1}`, 'วันที่-เวลา': now, WarehouseID: data.WarehouseID, LocationID: 'L001', ProductID: data.ProductID, LotNo: data.LotNo, ExpiryDate: data.ExpiryDate, QtyIn: Number(data.Qty), QtyOut: 0, RefType: 'RECEIPT', RefID: transactionID, ผู้ดำเนินการ: operator
+            });
+        } else if (type === 'ISSUE') {
+            const issueLine = { IssueID: transactionID, LineNo: 1, ProductID: data.ProductID, Qty: Number(data.Qty), LocationID: 'L001' };
+            db.Issues.push({ IssueID: transactionID, วันที่: now, WarehouseID: data.WarehouseID, สถานะ: 'Posted', ผู้จ่าย: operator });
+            db.IssueLines.push(issueLine);
+            db.StockLedger.push({
+                LedgerID: `L${db.StockLedger.length + 1}`, 'วันที่-เวลา': now, WarehouseID: data.WarehouseID, LocationID: 'L001', ProductID: data.ProductID, LotNo: '', ExpiryDate: '', QtyIn: 0, QtyOut: Number(data.Qty), RefType: 'ISSUE', RefID: transactionID, ผู้ดำเนินการ: operator
+            });
+        } else if (type === 'TRANSFER') {
+            db.Transfers.push({ TransferID: transactionID, วันที่: now, FromWarehouseID: data.FromWarehouseID, ToWarehouseID: data.ToWarehouseID, สถานะ: 'Posted', ผู้โอน: operator });
+            db.StockLedger.push({
+                LedgerID: `L${db.StockLedger.length + 1}`, 'วันที่-เวลา': now, WarehouseID: data.FromWarehouseID, LocationID: 'L001', ProductID: data.ProductID, LotNo: '', ExpiryDate: '', QtyIn: 0, QtyOut: Number(data.Qty), RefType: 'TRANSFER', RefID: transactionID, ผู้ดำเนินการ: operator
+            });
+            db.StockLedger.push({
+                LedgerID: `L${db.StockLedger.length + 2}`, 'วันที่-เวลา': now, WarehouseID: data.ToWarehouseID, LocationID: 'L002', ProductID: data.ProductID, LotNo: '', ExpiryDate: '', QtyIn: Number(data.Qty), QtyOut: 0, RefType: 'TRANSFER', RefID: transactionID, ผู้ดำเนินการ: operator
+            });
+        } else if (type === 'ADJUST') {
+            db.Adjustments.push({ AdjustID: transactionID, วันที่: now, WarehouseID: data.WarehouseID, สาเหตุ: data.Reason, ผู้ปรับ: operator, สถานะ: 'Posted' });
+            db.StockLedger.push({
+                LedgerID: `L${db.StockLedger.length + 1}`, 'วันที่-เวลา': now, WarehouseID: data.WarehouseID, LocationID: 'L001', ProductID: data.ProductID, LotNo: '', ExpiryDate: '', QtyIn: data.Qty > 0 ? Number(data.Qty) : 0, QtyOut: data.Qty < 0 ? Math.abs(Number(data.Qty)) : 0, RefType: 'ADJUST', RefID: transactionID, ผู้ดำเนินการ: operator
+            });
+        }
+
+        db.DailyUpdatePack.push(db.StockLedger[db.StockLedger.length - 1]);
+        calculateOnHand();
+        updateAllUI();
+        hideLoading();
+        alert('โพสต์ธุรกรรมเรียบร้อยแล้ว!');
+    }
+
+    function processRequest(requestID) {
+        const request = db.Requests.find(r => r.RequestID === requestID);
+        if (!request) return;
+
+        const issueID = `IS-${db.Issues.length + 1}`;
+        const now = new Date().toISOString();
+        const operator = 'พัสดุ';
+        const issueLine = db.RequestLines.filter(rl => rl.RequestID === requestID).map(rl => ({ IssueID: issueID, LineNo: rl.LineNo, ProductID: rl.ProductID, Qty: rl.QtyRequested, LocationID: 'L001' }));
+
+        // Create Issue document
+        db.Issues.push({ IssueID: issueID, วันที่: now, WarehouseID: request.FromWarehouseID, RequestID: requestID, ผู้จ่าย: operator, สถานะ: 'Posted' });
+        db.IssueLines.push(...issueLine);
+        
+        // Create Ledger entry for Issue (Out of MAIN)
+        issueLine.forEach(line => {
+            db.StockLedger.push({
+                LedgerID: `L${db.StockLedger.length + 1}`, 'วันที่-เวลา': now, WarehouseID: request.FromWarehouseID, LocationID: 'L001', ProductID: line.ProductID, LotNo: '', ExpiryDate: '', QtyIn: 0, QtyOut: Number(line.Qty), RefType: 'ISSUE', RefID: issueID, ผู้ดำเนินการ: operator
+            });
+        });
+
+        // Simulate In-transaction to DEPT for transfer
+        issueLine.forEach(line => {
+             db.StockLedger.push({
+                LedgerID: `L${db.StockLedger.length + 1}`, 'วันที่-เวลา': now, WarehouseID: request.ToWarehouseID, LocationID: 'L002', ProductID: line.ProductID, LotNo: '', ExpiryDate: '', QtyIn: Number(line.Qty), QtyOut: 0, RefType: 'TRANSFER', RefID: issueID, ผู้ดำเนินการ: operator
+            });
+        });
+
+        request.Status = 'Issued';
+        db.DailyUpdatePack.push(...db.StockLedger.filter(l => l.RefID === issueID));
+        calculateOnHand();
+        updateAllUI();
+        alert(`คำขอ ${requestID} ถูกจัดจ่ายเรียบร้อยแล้ว!`);
+    }
+
+    // UI rendering and event listeners
+    function updateAllUI() {
+        updateDashboard();
+        renderStockTable();
+        renderRequestsTable();
+        renderLedgerTable();
+        renderDailyUpdatePackList();
+        saveData();
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+        loadData();
+        updateAllUI();
+
+        const tabs = document.querySelectorAll('.tab-button');
+        const tabContents = document.querySelectorAll('.tab-content');
+        const transactionTypeTabs = document.querySelectorAll('.transaction-type-tab-btn');
+        const transactionForms = document.querySelectorAll('.transaction-form-container');
+
+        tabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                tabs.forEach(item => {
+                    item.classList.remove('border-blue-500', 'text-blue-600');
+                    item.classList.add('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+                });
+                tab.classList.add('border-blue-500', 'text-blue-600');
+                tab.classList.remove('border-transparent', 'text-gray-500', 'hover:text-gray-700', 'hover:border-gray-300');
+
+                tabContents.forEach(content => content.classList.remove('active'));
+                const contentId = tab.id.replace('-tab', '-content');
+                document.getElementById(contentId).classList.add('active');
+            });
+        });
+
+        document.getElementById('dashboard-tab').click();
+
+        transactionTypeTabs.forEach(tab => {
+            tab.addEventListener('click', () => {
+                transactionTypeTabs.forEach(item => item.classList.remove('bg-gray-200', 'text-blue-600'));
+                tab.classList.add('bg-gray-200', 'text-blue-600');
+                transactionForms.forEach(form => form.classList.add('hidden'));
+                document.getElementById(`${tab.dataset.type.toLowerCase()}-form-container`).classList.remove('hidden');
+                state.activeTransactionType = tab.dataset.type;
+            });
+        });
+        document.querySelector('.transaction-type-tab-btn').click();
+
+        document.getElementById('receipt-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const formData = Object.fromEntries(new FormData(e.target));
+            formData.ReceiptID = `RC-${db.Receipts.length + 1}`;
+            postTransaction('RECEIPT', formData);
+        });
+        document.getElementById('issue-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const formData = Object.fromEntries(new FormData(e.target));
+            formData.IssueID = `IS-${db.Issues.length + 1}`;
+            postTransaction('ISSUE', formData);
+        });
+        document.getElementById('transfer-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const formData = Object.fromEntries(new FormData(e.target));
+            formData.TransferID = `TR-${db.Transfers.length + 1}`;
+            postTransaction('TRANSFER', formData);
+        });
+        document.getElementById('adjust-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const formData = Object.fromEntries(new FormData(e.target));
+            formData.AdjustID = `AD-${db.Adjustments.length + 1}`;
+            postTransaction('ADJUST', formData);
+        });
+
+        document.getElementById('stock-search-input').addEventListener('input', (e) => {
+            const query = e.target.value.toLowerCase();
+            const filtered = db.OnHand.filter(item => {
+                const product = db.Products.find(p => p.ProductID === item.ProductID);
+                return (product.SKU.toLowerCase().includes(query) || product.ชื่อสินค้า.toLowerCase().includes(query));
+            });
+            renderStockTable(filtered);
+        });
+
+        document.getElementById('process-form-btn').addEventListener('click', () => {
+            const rawData = document.getElementById('google-form-data').value;
+            if (!rawData) {
+                alert('กรุณาวางข้อมูลคำขอจาก Google Form');
+                return;
+            }
+            try {
+                const mockFormData = JSON.parse(rawData);
+                const requestID = `REQ-${db.Requests.length + 1}`;
+                const now = new Date().toISOString();
+
+                // Map Google Form response to Requests and RequestLines
+                db.Requests.push({
+                    RequestID: requestID, วันที่ขอ: now, Requester: mockFormData.Requester, หน่วยงานผู้ขอ: mockFormData.Department, FromWarehouseID: 'MAIN', ToWarehouseID: 'DEPT', สถานะ: 'Submitted', ช่องทาง: 'GoogleForm'
+                });
+                mockFormData.Items.forEach((item, index) => {
+                    db.RequestLines.push({ RequestID: requestID, LineNo: index + 1, ProductID: item.ProductID, QtyRequested: item.Qty, หน่วย: item.Unit });
+                });
+
+                alert('สร้างคำขอเบิกใหม่จาก Google Form แล้ว! กรุณาตรวจสอบที่แท็บ "คำขอเบิก"');
+                renderRequestsTable();
+                document.getElementById('google-form-data').value = '';
+                saveData();
+            } catch (e) {
+                alert('รูปแบบข้อมูลไม่ถูกต้อง กรุณาใช้ JSON ที่ถูกต้อง');
+            }
+        });
+
+        document.getElementById('export-summary-btn').addEventListener('click', async () => {
+            showLoading();
+            const today = new Date().toISOString().slice(0, 10).replace(/-/g, '');
+            
+            // Simulate Journal CSV
+            const journalHeaders = ['TxnDate', 'TxnTime', 'TxnType', 'WarehouseFrom', 'WarehouseTo', 'ProductID', 'SKU', 'LotNo', 'ExpiryDate', 'Qty', 'Unit', 'RefID', 'RefType', 'Requester', 'Operator', 'Note'];
+            const journalRows = db.DailyUpdatePack.map(txn => {
+                const product = db.Products.find(p => p.ProductID === txn.ProductID);
+                const qty = txn.QtyIn - txn.QtyOut;
+                return [
+                    new Date(txn['วันที่-เวลา']).toISOString().slice(0, 10),
+                    new Date(txn['วันที่-เวลา']).toTimeString().slice(0, 8),
+                    txn.RefType,
+                    txn.WarehouseID,
+                    txn.RefType === 'TRANSFER' ? db.StockLedger.find(t => t.RefID === txn.RefID && t.RefType === 'TRANSFER' && t.WarehouseID !== txn.WarehouseID)?.WarehouseID || '' : '',
+                    txn.ProductID,
+                    product ? product.SKU : '',
+                    txn.LotNo || '',
+                    txn.ExpiryDate || '',
+                    qty,
+                    product ? product.หน่วยนับหลัก : '',
+                    txn.RefID,
+                    txn.RefType,
+                    '', // Requester not available in ledger
+                    txn['ผู้ดำเนินการ'],
+                    '' // Note not available
+                ].join(',');
+            }).join('\n');
+            const journalCsv = journalHeaders.join(',') + '\n' + journalRows;
+            
+            // Simulate OnHand CSV for MAIN
+            const onHandMainHeaders = ['WarehouseID', 'ProductID', 'SKU', 'LotNo', 'ExpiryDate', 'QtyOnHand', 'Unit'];
+            const onHandMainRows = db.OnHand.filter(o => o.WarehouseID === 'MAIN').map(item => {
+                const product = db.Products.find(p => p.ProductID === item.ProductID);
+                return [
+                    item.WarehouseID, item.ProductID, product.SKU, item.LotNo || '', item.ExpiryDate || '', item.QtyOnHand, product.หน่วยนับหลัก
+                ].join(',');
+            }).join('\n');
+            const onHandMainCsv = onHandMainHeaders.join(',') + '\n' + onHandMainRows;
+            
+            // Simulate OnHand CSV for DEPT
+            const onHandDeptHeaders = ['WarehouseID', 'ProductID', 'SKU', 'LotNo', 'ExpiryDate', 'QtyOnHand', 'Unit'];
+            const onHandDeptRows = db.OnHand.filter(o => o.WarehouseID === 'DEPT').map(item => {
+                const product = db.Products.find(p => p.ProductID === item.ProductID);
+                return [
+                    item.WarehouseID, item.ProductID, product.SKU, item.LotNo || '', item.ExpiryDate || '', item.QtyOnHand, product.หน่วยนับหลัก
+                ].join(',');
+            }).join('\n');
+            const onHandDeptCsv = onHandDeptHeaders.join(',') + '\n' + onHandDeptRows;
+            
+            // Simulate PDF summary (simplified)
+            const pdfSummary = `สรุปธุรกรรมประจำวัน ${new Date().toLocaleDateString()}\n\n` +
+                               `ยอดการเคลื่อนไหวทั้งหมด: ${db.DailyUpdatePack.length} ธุรกรรม\n\n` +
+                               `รายการต่ำกว่า ROP: ${document.getElementById('reorder-point-items').innerText} รายการ\n` +
+                               `รายการใกล้หมดอายุ: ${document.getElementById('expiry-items').innerText} รายการ\n`;
+
+            // Create a ZIP file (using a simple mock for now)
+            alert('ไฟล์สรุปกำลังถูกสร้างและดาวน์โหลด... (ฟีเจอร์นี้ถูกจำลอง)');
+            console.log('Legacy_Update_Journal:', journalCsv);
+            console.log('Legacy_OnHand_MAIN:', onHandMainCsv);
+            console.log('Legacy_OnHand_DEPT:', onHandDeptCsv);
+            console.log('Summary_PDF:', pdfSummary);
+            
+            hideLoading();
+        });
+
+    });
+</script>
+
+</body>
+
+</html>
